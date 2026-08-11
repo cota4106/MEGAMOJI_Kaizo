@@ -71,7 +71,7 @@
     "@primer/css": "20.x",
     "@primer/stylelint-config": "12.x",
     "@storybook/addon-essentials": "^6.3.4",
-    "@storybook/builder-webpack5": "^6.3.4",
+    "@storybook/builder-webpack5": "^10.5.7",
     "@storybook/manager-webpack5": "^6.3.5",
     "@storybook/vue3": "^6.3.5",
     "@types/color-convert": "^2.0.0",
