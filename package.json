@@ -62,7 +62,7 @@
     "gifenc": "mattdesl/gifenc#64842fca317b112a8590f8fef2bf3825da8f6fe3",
     "jszip": "^3.7.1",
     "mitt": "^3.0.1",
-    "pica": "^9.0.1",
+    "pica": "^10.0.2",
     "rollbar": "^2.24.0",
     "vue": "^3.1.5"
   },
