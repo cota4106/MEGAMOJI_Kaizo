@@ -69,7 +69,7 @@
   "devDependencies": {
     "@playwright/test": "^1.50.0",
     "@primer/css": "20.x",
-    "@primer/stylelint-config": "12.x",
+    "@primer/stylelint-config": "13.x",
     "@storybook/addon-essentials": "^6.3.4",
     "@storybook/builder-webpack5": "^6.3.4",
     "@storybook/manager-webpack5": "^6.3.5",
