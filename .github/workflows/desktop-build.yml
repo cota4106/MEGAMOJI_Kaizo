@@ -1,0 +1,52 @@
+name: Build desktop app
+
+# 手動で実行(Actionsタブの "Run workflow" ボタン)するほか、
+# v から始まるタグ(例: v1.0.0)をpushしたときにも自動実行されます。
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            dist-script: dist:mac
+            artifact-name: MEGAMOJI-mac
+            artifact-path: release/mac*/**
+          - os: windows-latest
+            dist-script: dist:win
+            artifact-name: MEGAMOJI-windows
+            artifact-path: release/win-unpacked/**
+          - os: ubuntu-latest
+            dist-script: dist:linux
+            artifact-name: MEGAMOJI-linux
+            artifact-path: release/linux-unpacked/**
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (${{ matrix.os }})
+        run: npm run ${{ matrix.dist-script }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: ${{ matrix.artifact-path }}
+          if-no-files-found: error

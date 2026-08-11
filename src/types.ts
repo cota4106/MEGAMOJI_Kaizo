@@ -1,0 +1,62 @@
+// A filter takes an image, and returns filtered image as an DataURL.
+export type Filter = (
+  image: HTMLImageElement,
+) => HTMLCanvasElement;
+
+// An animation takes a CanvasRenderingContext2D and an image, and render
+// image to the canvas.
+export type Animation = (
+  // a 0.0 - 1.0 progress of the animation
+  keyframe: number,
+  // a (possively) effected 2d rendering context
+  ctx: CanvasRenderingContext2D,
+  // the source image to be rendered
+  image: HTMLCanvasElement,
+  // range of the source image to be rendered
+  offsetH: number, offsetV: number, width: number, height: number,
+// size of the image to be rendered
+  cellWidth: number, cellHeight: number,
+) => Promise<void> | void;
+
+// Effects are called with CanvasRenderingContext2D before rendering, and
+// expected to configure the canvas. Note that users may enable multiple
+// effects at the same time.
+export type Effect = (
+  // a 0.0 - 1.0 progress of the animation
+  keyrame: number,
+  // the rendering context to be modified
+  ctx: CanvasRenderingContext2D,
+  // size of the image to be rendered
+  width: number, height: number,
+  // current values of the effect's adjustable parameters (see EffectParamDef)
+  params?: Record<string, number>,
+) => void;
+
+// WebGLEffect loads and configures a WebGLProgram, which is then used to effect
+// rendered images.
+export type WebGLEffect = (
+  keyframe: number,
+  width: number,
+  height: number,
+  // current values of the effect's adjustable parameters (see EffectParamDef)
+  params?: Record<string, number>,
+) => WebGLProgram;
+
+// EffectParamDef describes a single adjustable numeric parameter of an
+// Effect/WebGLEffect, used to render a slider in the UI.
+export type EffectParamDef = {
+  // key used to look up the current value in the params object passed to
+  // the effect function
+  key: string,
+  // label shown next to the slider
+  label: string,
+  min: number,
+  max: number,
+  step?: number,
+  default: number,
+};
+
+// Gradient is a list of colorstops
+export type ColorStop = { color: string, pos: number };
+
+export type Easing = (x: number) => number;
