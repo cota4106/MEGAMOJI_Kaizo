@@ -8,13 +8,13 @@ export default defineComponent({
   },
   methods: {
     backstage() {
-      window.open("https://scrapbox.io/MEGAMOJI/%F0%9F%93%8C_%E3%81%93%E3%82%8C%E3%81%AF%E3%81%AA%E3%81%AB%EF%BC%9F");
+      window.open("https://github.com/cota4106/MEGAMOJI_Kaizo");
     },
     donation() {
       window.open("https://note.com/zk_phi/n/n3a199c99d6d6");
     },
     share() {
-      window.open("https://twitter.com/share?url=https://zk-phi.github.io/MEGAMOJI&text=カスタム絵文字メーカー%20MEGAMOJI&hashtags=メガ文字");
+      window.open("https://twitter.com/share?url=https://cota4106.github.io/MEGAMOJI_Kaizo/&text=カスタム絵文字メーカー%20MEGAMOJI(サカバンペプシ改造版)&hashtags=メガ文字");
     },
   },
 });
@@ -28,14 +28,14 @@ export default defineComponent({
         <template #icon>
           💝
         </template>
-        投げ銭箱
+        MEGAMOJI本家制作者さんへの投げ銭
       </Button>
       /
       <Button type="text" @click="backstage">
         <template #icon>
           🛠
         </template>
-        開発室
+        改造版のGitHubページ
       </Button>
       /
       <Button type="text" @click="share">
