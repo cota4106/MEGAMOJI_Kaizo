@@ -46,6 +46,10 @@ export default defineComponent({
       </Button>
     </p>
     <p class="p">
+      Modified by サカバンペプシ
+      (<a class="link" href="https://github.com/zk-phi/MEGAMOJI" target="_blank" rel="noopener">元のMEGAMOJI</a>をベースに改造しています)
+    </p>
+    <p class="p">
       このページでは Cookie (アクセス数などの集計に Google Analytics、エラーの検知に Rollbar) を使用しています。
     </p>
     <p class="p footnote">
@@ -64,6 +68,10 @@ export default defineComponent({
 .footnote {
   font-style: italic;
   color: var(--border);
+}
+
+.link {
+  color: inherit;
 }
 
 .p {
