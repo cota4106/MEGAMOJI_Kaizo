@@ -63,6 +63,18 @@ export default defineComponent({
         </template>
         ライセンス表示
       </Button>
+      <p class="credit">
+        この改造版の開発には Anthropic の Claude(AI)を利用しています。
+      </p>
     </Space>
   </Card>
 </template>
+
+<style scoped>
+.credit {
+  margin: 0;
+  font-size: var(--fontSizeSmall, var(--fontSizeMedium));
+  color: var(--fg);
+  opacity: 0.6;
+}
+</style>
