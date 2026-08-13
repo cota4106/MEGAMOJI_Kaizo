@@ -57,6 +57,44 @@ const SPEED_OPTIONS = [
   { label: "はやい", value: 0.3 },
 ];
 
+// --- Undo/Redo helpers -----------------------------------------------
+// conf の中身は関数を値に持つオブジェクト参照(Effect/Animation本体など)を含むため、
+// そのままJSONにできない。かわりに label で参照し直せる "スナップショット" 形式にする。
+
+type ConfSnapshot = {
+  trimming: string;
+  targetAspect: number;
+  speedLabel: string;
+  cells: [number, number];
+  animation: string | null;
+  animationInvert: boolean;
+  staticEffects: string[];
+  effects: string[];
+  webglEffects: string[];
+  staticEffectParams: ParamValues;
+  effectParams: ParamValues;
+  webglEffectParams: ParamValues;
+  trimH: [number, number];
+  trimV: [number, number];
+  noCrop: boolean;
+  easing: string;
+  duration: number;
+  backgroundColor: string;
+  transparent: boolean;
+};
+
+function findByLabel<T extends { label: string }>(list: T[], label: string | null): T | null {
+  if (label === null) return null;
+  return list.find((item) => item.label === label) ?? null;
+}
+
+function flattenCategories<T>(categories: { label: string, effects: T[] }[]): T[] {
+  return categories.flatMap((category) => category.effects);
+}
+
+const HISTORY_LIMIT = 50;
+const HISTORY_DEBOUNCE_MS = 500;
+
 export default defineComponent({
   components: {
     Color,
@@ -122,11 +160,22 @@ export default defineComponent({
       /* internals */
       running: false,
       dirty: false,
+      /* undo/redo */
+      undoStack: [] as string[],
+      redoStack: [] as string[],
+      applyingHistory: false,
+      historyTimer: null as (ReturnType<typeof setTimeout> | null),
     };
   },
   computed: {
     naturalAspect(): number {
       return (this.conf.trimH[1] - this.conf.trimH[0]) / (this.conf.trimV[1] - this.conf.trimV[0]);
+    },
+    canUndo(): boolean {
+      return this.undoStack.length > 1;
+    },
+    canRedo(): boolean {
+      return this.redoStack.length > 0;
     },
   },
   watch: {
@@ -155,6 +204,7 @@ export default defineComponent({
         ];
         Analytics.changeAnimation(animationName, effectNames);
         this.render(true);
+        this.scheduleHistoryPush();
       },
       deep: true,
     },
@@ -168,8 +218,145 @@ export default defineComponent({
   },
   mounted() {
     Analytics.changeAnimation("", []);
+    this.undoStack = [JSON.stringify(this.snapshotConf())];
+    window.addEventListener("keydown", this.onKeydown);
+  },
+  unmounted() {
+    window.removeEventListener("keydown", this.onKeydown);
+    if (this.historyTimer !== null) {
+      clearTimeout(this.historyTimer);
+    }
   },
   methods: {
+    // --- undo/redo -------------------------------------------------
+    snapshotConf(): ConfSnapshot {
+      return {
+        trimming: this.conf.trimming.label,
+        targetAspect: this.conf.targetAspect,
+        speedLabel: this.conf.speed.label,
+        cells: [this.conf.cells[0], this.conf.cells[1]],
+        animation: this.conf.animation ? this.conf.animation.label : null,
+        animationInvert: this.conf.animationInvert,
+        staticEffects: this.conf.staticEffects.map((e) => e.label),
+        effects: this.conf.effects.map((e) => e.label),
+        webglEffects: this.conf.webglEffects.map((e) => e.label),
+        staticEffectParams: JSON.parse(JSON.stringify(this.conf.staticEffectParams)),
+        effectParams: JSON.parse(JSON.stringify(this.conf.effectParams)),
+        webglEffectParams: JSON.parse(JSON.stringify(this.conf.webglEffectParams)),
+        trimH: [this.conf.trimH[0], this.conf.trimH[1]],
+        trimV: [this.conf.trimV[0], this.conf.trimV[1]],
+        noCrop: this.conf.noCrop,
+        easing: this.conf.easing.label,
+        duration: this.conf.duration,
+        backgroundColor: this.conf.backgroundColor,
+        transparent: this.conf.transparent,
+      };
+    },
+    applyConfSnapshot(snapshot: ConfSnapshot): void {
+      const allEffectOptions = flattenCategories<EffectOption>(this.effects)
+        .concat(flattenCategories<EffectOption>(this.bgeffects));
+      const allStaticOptions = flattenCategories<EffectOption>(this.staticeffects);
+      const allWebglOptions = flattenCategories<WebGLEffectOption>(this.webgleffects);
+
+      this.applyingHistory = true;
+      this.conf.trimming = findByLabel(TRIMMING_OPTIONS, snapshot.trimming) ?? TRIMMING_OPTIONS[0];
+      this.conf.targetAspect = snapshot.targetAspect;
+      this.conf.speed = findByLabel(SPEED_OPTIONS, snapshot.speedLabel) ?? SPEED_OPTIONS[2];
+      this.conf.cells = [snapshot.cells[0], snapshot.cells[1]];
+      this.conf.animation = snapshot.animation
+        ? findByLabel(this.animations, snapshot.animation)
+        : null;
+      this.conf.animationInvert = snapshot.animationInvert;
+      this.conf.staticEffects = snapshot.staticEffects
+        .map((label) => findByLabel(allStaticOptions, label))
+        .filter((option): option is EffectOption => option !== null);
+      this.conf.effects = snapshot.effects
+        .map((label) => findByLabel(allEffectOptions, label))
+        .filter((option): option is EffectOption => option !== null);
+      this.conf.webglEffects = snapshot.webglEffects
+        .map((label) => findByLabel(allWebglOptions, label))
+        .filter((option): option is WebGLEffectOption => option !== null);
+      this.conf.staticEffectParams = snapshot.staticEffectParams;
+      this.conf.effectParams = snapshot.effectParams;
+      this.conf.webglEffectParams = snapshot.webglEffectParams;
+      this.conf.trimH = [snapshot.trimH[0], snapshot.trimH[1]];
+      this.conf.trimV = [snapshot.trimV[0], snapshot.trimV[1]];
+      this.conf.noCrop = snapshot.noCrop;
+      this.conf.easing = findByLabel(easings, snapshot.easing) ?? easings[0];
+      this.conf.duration = snapshot.duration;
+      this.conf.backgroundColor = snapshot.backgroundColor;
+      this.conf.transparent = snapshot.transparent;
+      this.$nextTick(() => {
+        this.applyingHistory = false;
+      });
+    },
+    scheduleHistoryPush(): void {
+      if (this.applyingHistory) {
+        return;
+      }
+      if (this.historyTimer !== null) {
+        clearTimeout(this.historyTimer);
+      }
+      this.historyTimer = setTimeout(() => {
+        this.historyTimer = null;
+        this.pushHistory();
+      }, HISTORY_DEBOUNCE_MS);
+    },
+    pushHistory(): void {
+      const snapshot = JSON.stringify(this.snapshotConf());
+      if (snapshot === this.undoStack[this.undoStack.length - 1]) {
+        return;
+      }
+      this.undoStack.push(snapshot);
+      if (this.undoStack.length > HISTORY_LIMIT) {
+        this.undoStack.shift();
+      }
+      this.redoStack = [];
+    },
+    undo(): void {
+      // pending debounced changes should count as "the current state" first
+      if (this.historyTimer !== null) {
+        clearTimeout(this.historyTimer);
+        this.historyTimer = null;
+        this.pushHistory();
+      }
+      if (!this.canUndo) {
+        return;
+      }
+      const current = this.undoStack.pop() as string;
+      this.redoStack.push(current);
+      const previous = this.undoStack[this.undoStack.length - 1];
+      this.applyConfSnapshot(JSON.parse(previous));
+    },
+    redo(): void {
+      if (!this.canRedo) {
+        return;
+      }
+      const snapshot = this.redoStack.pop() as string;
+      this.undoStack.push(snapshot);
+      this.applyConfSnapshot(JSON.parse(snapshot));
+    },
+    onKeydown(event: KeyboardEvent): void {
+      const target = event.target as HTMLElement | null;
+      const isEditable = !!target && (
+        target.tagName === "INPUT"
+        || target.tagName === "TEXTAREA"
+        || target.isContentEditable
+      );
+      if (isEditable) {
+        return;
+      }
+      const ctrlOrCmd = event.ctrlKey || event.metaKey;
+      if (!ctrlOrCmd || event.key.toLowerCase() !== "z") {
+        return;
+      }
+      event.preventDefault();
+      if (event.shiftKey) {
+        this.redo();
+      } else {
+        this.undo();
+      }
+    },
     // merges an effect's param defaults with the current slider values
     resolveParams(
       option: EffectOption | WebGLEffectOption,
@@ -298,6 +485,28 @@ export default defineComponent({
 
 <template>
   <Card v-if="show">
+    <div class="history-bar">
+      <Button
+          type="text"
+          name="元に戻す (Ctrl+Z)"
+          :disabled="!canUndo"
+          @click="undo">
+        <template #icon>
+          ↩️
+        </template>
+        元に戻す
+      </Button>
+      <Button
+          type="text"
+          name="やり直す (Ctrl+Shift+Z)"
+          :disabled="!canRedo"
+          @click="redo">
+        <template #icon>
+          ↪️
+        </template>
+        やり直す
+      </Button>
+    </div>
     <Grid v-if="!devMode" :columns="[[450, 1], [Infinity, 2]]" spaced>
       <GridItem>
         <Space vertical xlarge full>
@@ -443,3 +652,16 @@ export default defineComponent({
         @build-shader="conf.webglEffects = [$event]" />
   </Card>
 </template>
+
+<style scoped>
+.history-bar {
+  display: flex;
+  gap: var(--spacingMedium);
+  margin-bottom: var(--spacingMedium);
+}
+
+.history-bar :deep(.button:disabled) {
+  cursor: default;
+  opacity: 0.35;
+}
+</style>
