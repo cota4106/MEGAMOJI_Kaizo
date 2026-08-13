@@ -858,6 +858,18 @@ export default defineComponent({
   align-items: center;
 }
 
+.preset-save-row :deep(.input),
+.preset-import-row :deep(.input) {
+  /* ボタンの文字が折り返さないよう、入力欄側を少し短くしておく */
+  width: calc(100% - 2em);
+}
+
+.preset-save-row :deep(.button),
+.preset-import-row :deep(.button) {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 .preset-empty {
   margin: 0;
   font-size: var(--fontSizeMedium);
