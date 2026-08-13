@@ -10,6 +10,7 @@ import NumberInput from "../inputs/Number.vue";
 import Slider from "../inputs/Slider.vue";
 import Fieldset from "../inputs/Fieldset.vue";
 import Color from "../inputs/Color.vue";
+import Input from "../inputs/Input.vue";
 import Space from "../global/Space.vue";
 import Card from "../global/Card.vue";
 import Grid from "../global/Grid.vue";
@@ -95,6 +96,71 @@ function flattenCategories<T>(categories: { label: string, effects: T[] }[]): T[
 const HISTORY_LIMIT = 50;
 const HISTORY_DEBOUNCE_MS = 500;
 
+// --- Preset helpers -----------------------------------------------
+type Preset = {
+  id: string;
+  name: string;
+  snapshot: ConfSnapshot;
+  savedAt: number;
+};
+
+const PRESET_STORAGE_KEY = "megamoji_presets_v1";
+
+function loadPresetsFromStorage(): Preset[] {
+  try {
+    const raw = window.localStorage.getItem(PRESET_STORAGE_KEY);
+    if (!raw) {
+      return [];
+    }
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function savePresetsToStorage(presets: Preset[]): void {
+  try {
+    window.localStorage.setItem(PRESET_STORAGE_KEY, JSON.stringify(presets));
+  } catch (e) {
+    // localStorageが使えない環境(プライベートブラウズ等)では何もしない
+  }
+}
+
+// 名前+設定内容だけをコード化する(id/savedAtは共有先で新規に振り直す)
+const PRESET_CODE_PREFIX = "MGMJPRESET1:";
+
+function encodePresetToCode(preset: Preset): string {
+  const payload = JSON.stringify({ name: preset.name, snapshot: preset.snapshot });
+  // 絵文字等のマルチバイト文字を含むためencodeURIComponentを経由してbase64化する
+  const base64 = window.btoa(encodeURIComponent(payload).replace(
+    /%([0-9A-F]{2})/g,
+    (_, hex) => String.fromCharCode(parseInt(hex, 16)),
+  ));
+  return `${PRESET_CODE_PREFIX}${base64}`;
+}
+
+function decodePresetFromCode(code: string): { name: string, snapshot: ConfSnapshot } | null {
+  const trimmed = code.trim();
+  if (!trimmed.startsWith(PRESET_CODE_PREFIX)) {
+    return null;
+  }
+  try {
+    const base64 = trimmed.slice(PRESET_CODE_PREFIX.length);
+    const binary = window.atob(base64);
+    const percentEncoded = binary.split("").map(
+      (char) => `%${char.charCodeAt(0).toString(16).padStart(2, "0")}`,
+    ).join("");
+    const payload = JSON.parse(decodeURIComponent(percentEncoded));
+    if (typeof payload.name !== "string" || typeof payload.snapshot !== "object") {
+      return null;
+    }
+    return payload;
+  } catch (e) {
+    return null;
+  }
+}
+
 export default defineComponent({
   components: {
     Color,
@@ -110,6 +176,7 @@ export default defineComponent({
     Space,
     Select,
     Slider,
+    Input,
     DevTool,
   },
   props: {
@@ -165,6 +232,12 @@ export default defineComponent({
       redoStack: [] as string[],
       applyingHistory: false,
       historyTimer: null as (ReturnType<typeof setTimeout> | null),
+      /* presets */
+      presets: [] as Preset[],
+      newPresetName: "",
+      importCode: "",
+      importError: false,
+      copiedPresetId: null as (string | null),
     };
   },
   computed: {
@@ -219,6 +292,7 @@ export default defineComponent({
   mounted() {
     Analytics.changeAnimation("", []);
     this.undoStack = [JSON.stringify(this.snapshotConf())];
+    this.presets = loadPresetsFromStorage();
     window.addEventListener("keydown", this.onKeydown);
   },
   unmounted() {
@@ -356,6 +430,64 @@ export default defineComponent({
       } else {
         this.undo();
       }
+    },
+    // --- presets -----------------------------------------------------
+    savePreset(): void {
+      const name = this.newPresetName.trim() || `プリセット ${this.presets.length + 1}`;
+      const preset: Preset = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        name,
+        snapshot: this.snapshotConf(),
+        savedAt: Date.now(),
+      };
+      this.presets = [preset, ...this.presets];
+      savePresetsToStorage(this.presets);
+      this.newPresetName = "";
+    },
+    applyPreset(preset: Preset): void {
+      this.applyConfSnapshot(preset.snapshot);
+      this.scheduleHistoryPush();
+    },
+    deletePreset(preset: Preset): void {
+      // eslint-disable-next-line no-alert
+      if (!window.confirm(`「${preset.name}」を削除しますか？`)) {
+        return;
+      }
+      this.presets = this.presets.filter((p) => p.id !== preset.id);
+      savePresetsToStorage(this.presets);
+    },
+    async sharePreset(preset: Preset): Promise<void> {
+      const code = encodePresetToCode(preset);
+      try {
+        await navigator.clipboard.writeText(code);
+        this.copiedPresetId = preset.id;
+        window.setTimeout(() => {
+          if (this.copiedPresetId === preset.id) {
+            this.copiedPresetId = null;
+          }
+        }, 2000);
+      } catch (e) {
+        // クリップボードAPIが使えない場合は手動コピー用に表示する
+        // eslint-disable-next-line no-alert
+        window.prompt("このコードをコピーしてください:", code);
+      }
+    },
+    importPresetFromCode(): void {
+      const decoded = decodePresetFromCode(this.importCode);
+      if (!decoded) {
+        this.importError = true;
+        return;
+      }
+      this.importError = false;
+      const preset: Preset = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        name: decoded.name,
+        snapshot: decoded.snapshot,
+        savedAt: Date.now(),
+      };
+      this.presets = [preset, ...this.presets];
+      savePresetsToStorage(this.presets);
+      this.importCode = "";
     },
     // merges an effect's param defaults with the current slider values
     resolveParams(
@@ -507,6 +639,57 @@ export default defineComponent({
         やり直す
       </Button>
     </div>
+    <Fieldset label="プリセット" class="preset-fieldset">
+      <Space vertical full>
+        <div class="preset-save-row">
+          <Input
+              v-model="newPresetName"
+              name="プリセット名"
+              block
+              placeholder="プリセット名(空欄でも可)" />
+          <Button type="text" name="現在の設定を保存" @click="savePreset">
+            <template #icon>
+              💾
+            </template>
+            保存
+          </Button>
+        </div>
+        <p v-if="presets.length === 0" class="preset-empty">
+          保存したプリセットはまだありません。
+        </p>
+        <ul v-else class="preset-list">
+          <li v-for="preset in presets" :key="preset.id" class="preset-item">
+            <span class="preset-name">{{ preset.name }}</span>
+            <Button type="text" name="このプリセットを読み込む" @click="applyPreset(preset)">
+              読み込む
+            </Button>
+            <Button type="text" name="このプリセットの共有コードをコピー" @click="sharePreset(preset)">
+              {{ copiedPresetId === preset.id ? "コピーしました！" : "共有" }}
+            </Button>
+            <Button type="text" danger name="このプリセットを削除" @click="deletePreset(preset)">
+              削除
+            </Button>
+          </li>
+        </ul>
+        <div class="preset-import-row">
+          <Input
+              v-model="importCode"
+              name="共有コード"
+              block
+              :error="importError"
+              placeholder="もらった共有コードを貼り付け" />
+          <Button type="text" name="共有コードから追加" @click="importPresetFromCode">
+            <template #icon>
+              📥
+            </template>
+            追加
+          </Button>
+        </div>
+        <p v-if="importError" class="preset-import-error">
+          コードを読み取れませんでした。コピーミスがないか確認してください。
+        </p>
+      </Space>
+    </Fieldset>
     <Grid v-if="!devMode" :columns="[[450, 1], [Infinity, 2]]" spaced>
       <GridItem>
         <Space vertical xlarge full>
@@ -663,5 +846,58 @@ export default defineComponent({
 .history-bar :deep(.button:disabled) {
   cursor: default;
   opacity: 0.35;
+}
+
+.preset-fieldset {
+  margin-bottom: var(--spacingLarge);
+}
+
+.preset-save-row {
+  display: flex;
+  gap: var(--spacingMedium);
+  align-items: center;
+}
+
+.preset-empty {
+  margin: 0;
+  font-size: var(--fontSizeMedium);
+  color: var(--fg);
+  opacity: 0.6;
+}
+
+.preset-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.preset-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacingMedium);
+  padding: var(--spacingSmall) 0;
+}
+
+.preset-name {
+  overflow: hidden;
+  font-size: var(--fontSizeMedium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1 1 auto;
+}
+
+.preset-import-row {
+  display: flex;
+  gap: var(--spacingMedium);
+  align-items: center;
+  padding-top: var(--spacingSmall);
+  margin-top: var(--spacingSmall);
+  border-top: 1px solid var(--border);
+}
+
+.preset-import-error {
+  margin: 0;
+  font-size: var(--fontSizeSmall, var(--fontSizeMedium));
+  color: var(--danger);
 }
 </style>
