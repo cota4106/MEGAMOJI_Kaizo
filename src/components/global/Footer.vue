@@ -49,6 +49,12 @@ export default defineComponent({
       Modified by サカバンペプシ
       (<a class="link" href="https://github.com/zk-phi/MEGAMOJI" target="_blank" rel="noopener">元のMEGAMOJI</a>をベースに改造しています)
     </p>
+    <p class="p">
+      <img
+          class="hit-counter"
+          src="https://api.visitorbadge.io/api/visitors?user=cota4106&repo=MEGAMOJI_Kaizo&labelColor=%23555555&countColor=%2379C83D&label=views&style=default"
+          alt="このページの閲覧数">
+    </p>
     <p class="p footnote">
       Peace, Love, Unity, Respect 🫶
     </p>
@@ -73,5 +79,10 @@ export default defineComponent({
 
 .p {
   margin: 0 0 var(--spacingMedium);
+}
+
+.hit-counter {
+  height: 20px;
+  vertical-align: middle;
 }
 </style>
