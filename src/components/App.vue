@@ -57,6 +57,15 @@ export default defineComponent({
       },
     };
   },
+  computed: {
+    miniPreviewUrl(): string | null {
+      const firstRow = this.resultImages[0];
+      if (!firstRow || !firstRow[0]) {
+        return null;
+      }
+      return URL.createObjectURL(firstRow[0]);
+    },
+  },
   mounted() {
     Analytics.switchMode("text");
   },
@@ -77,6 +86,12 @@ export default defineComponent({
     onRender(img: HTMLCanvasElement, name: string): void {
       this.baseImage = img;
       this.name = name;
+    },
+    scrollToResult(): void {
+      const el = this.$refs.resultAnchor as HTMLElement | undefined;
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
     },
   },
 });
@@ -140,6 +155,7 @@ export default defineComponent({
               @render="onRenderTarget" />
         </GridItem>
         <GridItem>
+          <div ref="resultAnchor"></div>
           <Tutorial v-if="!baseImage" />
           <Space v-else vertical large>
             <BaseImage v-if="isDev" :image="baseImage" />
@@ -152,10 +168,53 @@ export default defineComponent({
         </GridItem>
       </Grid>
 
+      <button
+          v-if="ui.showTargetPanel && miniPreviewUrl"
+          type="button"
+          class="mini-preview"
+          title="プレビューを見る"
+          @click="scrollToResult">
+        <img :src="miniPreviewUrl" alt="現在のプレビュー">
+      </button>
+
       <Footer />
     </Space>
   </div>
 </template>
+
+<style>
+.mini-preview {
+  position: fixed;
+  right: var(--spacingLarge);
+  bottom: var(--spacingLarge);
+  z-index: 100;
+  display: none;
+  width: 64px;
+  height: 64px;
+  padding: 0;
+  cursor: pointer;
+  background-color: var(--bg);
+  border: 2px solid var(--primary);
+  border-radius: var(--borderRadiusLarge, 12px);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+.mini-preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: inherit;
+}
+
+/* Result(プレビュー)がすでに横に常時表示されている画面幅(Gridが1列でなくなる境目)
+   では、フローティングプレビューは不要なので隠す。Grid側のブレークポイント(760px)に合わせている */
+@media (max-width: 760px) {
+  .mini-preview {
+    display: block;
+  }
+}
+</style>
 
 <style>
 :root {
