@@ -96,7 +96,7 @@
     "eslint-plugin-import": "^2.26.0",
     "eslint-plugin-vue": "^7.16.0",
     "postcss": "8.x",
-    "postcss-html": "1.x",
+    "postcss-html": "2.x",
     "ssim.js": "^3.5.0",
     "stylelint": "14.x",
     "stylelint-config-html": "1.x",
