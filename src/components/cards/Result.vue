@@ -20,16 +20,20 @@ import {
 } from "../../utils/sizeLimits";
 import {
   GalleryEntry, loadGalleryFromStorage, addToGallery, removeFromGallery, clearGallery,
+  getGalleryLimit, setGalleryLimit,
 } from "../../utils/gallery";
+import NumberInput from "../inputs/Number.vue";
 
 export default defineComponent({
   components: {
-    RawResult, Preview, Checkbox, Card, Space, Button, Effect, Back, Save, Fieldset,
+    RawResult, Preview, Checkbox, Card, Space, Button, Effect, Back, Save, Fieldset, NumberInput,
   },
   props: {
     images: { type: Array as PropType<Blob[][]>, required: true },
     name: { type: String, default: null },
     showTarget: { type: Boolean, required: false },
+    getSettingsSnapshot: { type: Function as PropType<() => unknown>, default: null },
+    applySettingsSnapshot: { type: Function as PropType<(s: unknown) => void>, default: null },
   },
   emits: [
     "toggleShowTarget",
@@ -41,6 +45,7 @@ export default defineComponent({
       isDev: NODE_ENV === "development",
       gallery: [] as GalleryEntry[],
       showGallery: false,
+      galleryLimit: 10,
     };
   },
   computed: {
@@ -66,6 +71,7 @@ export default defineComponent({
   },
   mounted() {
     this.gallery = loadGalleryFromStorage();
+    this.galleryLimit = getGalleryLimit();
   },
   methods: {
     formatKiB,
@@ -74,13 +80,20 @@ export default defineComponent({
       const filename = filenamify(this.name ?? "", { replacement: "" }).normalize() || "megamoji";
       download.then((res) => saveAs(res, `${filename}.${extension(res)}`));
       Analytics.download();
-      // 履歴(ギャラリー)にサムネイルを記録する。先頭のマスの絵だけを代表として使う
+      // 履歴(ギャラリー)にサムネイルと、その時の設定を記録する。先頭のマスの絵を代表として使う
       const firstCell = this.images[0]?.[0];
+      const settings = this.getSettingsSnapshot ? this.getSettingsSnapshot() : null;
       if (firstCell) {
-        addToGallery(firstCell, filename).then((updated) => {
+        addToGallery(firstCell, filename, settings).then((updated) => {
           this.gallery = updated;
         });
       }
+    },
+    onLoadGalleryEntry(entry: GalleryEntry): void {
+      if (!entry.settings || !this.applySettingsSnapshot) {
+        return;
+      }
+      this.applySettingsSnapshot(entry.settings);
     },
     onRemoveGalleryEntry(id: string): void {
       this.gallery = removeFromGallery(id);
@@ -92,6 +105,10 @@ export default defineComponent({
       }
       clearGallery();
       this.gallery = [];
+    },
+    onChangeGalleryLimit(value: number): void {
+      this.galleryLimit = value;
+      this.gallery = setGalleryLimit(value);
     },
     formatDate(timestamp: number): string {
       const d = new Date(timestamp);
@@ -167,15 +184,31 @@ export default defineComponent({
     <Fieldset label="作った絵文字の履歴">
       <Space vertical full>
         <p class="gallery-hint">
-          「絵文字を保存」を押すたびに、見た目の記録として小さいサムネイルだけを保存します(元のファイルそのものはブラウザに保存されません)。
+          「絵文字を保存」を押すたびに、見た目のサムネイルとその時の設定を記録します(元のファイルそのものはブラウザに保存されません)。
         </p>
+        <div class="gallery-limit-row">
+          <span class="gallery-limit-label">保存する件数(上限)</span>
+          <NumberInput
+              :model-value="galleryLimit"
+              :min="1"
+              :max="100"
+              style="width: 80px;"
+              @update:model-value="onChangeGalleryLimit" />
+        </div>
         <p v-if="gallery.length === 0" class="gallery-empty">
           まだ履歴はありません。
         </p>
         <template v-else>
           <div class="gallery-grid">
             <div v-for="entry in gallery" :key="entry.id" class="gallery-item">
-              <img :src="entry.thumbnail" :alt="entry.name" class="gallery-thumb">
+              <button
+                  type="button"
+                  class="gallery-thumb-button"
+                  :disabled="!entry.settings"
+                  :title="entry.settings ? '設定を読み込む' : '設定が記録されていません'"
+                  @click="onLoadGalleryEntry(entry)">
+                <img :src="entry.thumbnail" :alt="entry.name" class="gallery-thumb">
+              </button>
               <span class="gallery-name">{{ entry.name }}</span>
               <span class="gallery-date">{{ formatDate(entry.createdAt) }}</span>
               <button
@@ -272,6 +305,32 @@ export default defineComponent({
   align-items: center;
   width: 80px;
   gap: 2px;
+}
+
+.gallery-limit-row {
+  display: flex;
+  gap: var(--spacingMedium);
+  align-items: center;
+}
+
+.gallery-limit-label {
+  font-size: var(--fontSizeMedium);
+  color: var(--fg);
+}
+
+.gallery-thumb-button {
+  padding: 0;
+  cursor: pointer;
+  background: none;
+  border: none;
+}
+
+.gallery-thumb-button:disabled {
+  cursor: default;
+}
+
+.gallery-thumb-button:not(:disabled):hover .gallery-thumb {
+  border-color: var(--primary);
 }
 
 .gallery-thumb {
