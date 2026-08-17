@@ -155,16 +155,17 @@ export default defineComponent({
               @render="onRenderTarget" />
         </GridItem>
         <GridItem>
-          <div ref="resultAnchor"></div>
-          <Tutorial v-if="!baseImage" />
-          <Space v-else vertical large>
-            <BaseImage v-if="isDev" :image="baseImage" />
-            <Result
-                :images="resultImages"
-                :name="name"
-                :show-target="ui.showTargetPanel"
-                @toggle-show-target="onToggleShowTarget" />
-          </Space>
+          <div ref="resultAnchor" class="sticky-preview">
+            <Tutorial v-if="!baseImage" />
+            <Space v-else vertical large>
+              <BaseImage v-if="isDev" :image="baseImage" />
+              <Result
+                  :images="resultImages"
+                  :name="name"
+                  :show-target="ui.showTargetPanel"
+                  @toggle-show-target="onToggleShowTarget" />
+            </Space>
+          </div>
         </GridItem>
       </Grid>
 
@@ -183,6 +184,15 @@ export default defineComponent({
 </template>
 
 <style>
+.sticky-preview {
+  position: sticky;
+  top: var(--spacingLarge);
+  /* 縦に長い設定パネルより自分の方が短くても、画面の高さいっぱいまでは追従したいので
+     ビューポート高さから少し余白を引いた分を上限にしておく(はみ出す分は中でスクロール) */
+  max-height: calc(100vh - var(--spacingLarge) * 2);
+  overflow-y: auto;
+}
+
 .mini-preview {
   position: fixed;
   right: var(--spacingLarge);
