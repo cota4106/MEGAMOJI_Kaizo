@@ -93,6 +93,17 @@ export default defineComponent({
         el.scrollIntoView({ behavior: "smooth", block: "start" });
       }
     },
+    getCurrentConfSnapshot(): unknown {
+      const target = this.$refs.targetRef as { snapshotConf?: () => unknown } | undefined;
+      return target?.snapshotConf ? target.snapshotConf() : null;
+    },
+    applyGallerySettings(settings: unknown): void {
+      const target = this.$refs.targetRef as { applyConfSnapshot?: (s: unknown) => void } | undefined;
+      if (target?.applyConfSnapshot) {
+        target.applyConfSnapshot(settings);
+      }
+      this.ui.showTargetPanel = true;
+    },
   },
 });
 </script>
@@ -149,6 +160,7 @@ export default defineComponent({
               :emoji-size="emojiSize"
               @render="onRender" />
           <Target
+              ref="targetRef"
               v-model:emoji-size="emojiSize"
               :show="ui.showTargetPanel"
               :base-image="baseImage"
@@ -163,6 +175,8 @@ export default defineComponent({
                   :images="resultImages"
                   :name="name"
                   :show-target="ui.showTargetPanel"
+                  :get-settings-snapshot="getCurrentConfSnapshot"
+                  :apply-settings-snapshot="applyGallerySettings"
                   @toggle-show-target="onToggleShowTarget" />
             </Space>
           </div>
